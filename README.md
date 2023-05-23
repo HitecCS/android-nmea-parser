@@ -1,6 +1,6 @@
-# android-nmea-parser
-
+# android-nmea-parser [![](https://jitpack.io/v/MarcellHarmaci/android-nmea-parser.svg)](https://jitpack.io/#MarcellHarmaci/android-nmea-parser)
 Light-weight Android Java library for NMEA sentences parsing
+
 ## Supported sentences:
 * GPRMC/GNRMC
 * GPGGA/GNGGA
