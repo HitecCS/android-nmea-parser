@@ -418,38 +418,43 @@ class BasicNMEAParser(private val handler: BasicNMEAHandler?) {
         }
     }
 
-    @Synchronized
-    fun parse(sentence: String?) {
-        if (sentence == null) {
-            throw NullPointerException()
-        }
-        handler!!.onStart()
-        try {
-            val matcher = ExMatcher(GENERAL_SENTENCE.matcher(sentence))
-            if (matcher.matches()) {
-                val type = matcher.nextString("type")!!
-                val stringType = StringType.valueOf(type)
-                val content = matcher.nextString("content")!!
-                val expected_checksum = matcher.nextHexInt("checksum")!!
-                val actual_checksum = calculateChecksum(sentence)
-                if (actual_checksum != expected_checksum) {
-                    handler.onBadChecksum(expected_checksum, actual_checksum)
-                } else if (!functions.containsKey(stringType) || !functions[stringType]!!
-                        .parse(
-                            handler, content
-                        )
-                ) {
-                    handler.onUnrecognized(sentence)
-                }
-            } else {
-                handler.onUnrecognized(sentence)
-            }
-        } catch (e: Exception) {
-            handler.onException(e)
-        } finally {
-            handler.onFinished()
-        }
-    }
+	@Synchronized
+	fun parse(sentence: String?) {
+		if (sentence == null) {
+			throw NullPointerException()
+		}
+
+		// Remove whitespaces
+		val whitespace = listOf(' ', '\n', '\r', '\t')
+		val sentenceWoWs = sentence.filterNot { whitespace.contains(it) }
+
+		handler!!.onStart()
+		try {
+			val matcher = ExMatcher(GENERAL_SENTENCE.matcher(sentenceWoWs))
+			if (matcher.matches()) {
+				val type = matcher.nextString("type")!!
+				val stringType = StringType.valueOf(type)
+				val content = matcher.nextString("content")!!
+				val expectedChecksum = matcher.nextHexInt("checksum")!!
+				val actualChecksum = calculateChecksum(sentenceWoWs)
+				if (actualChecksum != expectedChecksum) {
+					handler.onBadChecksum(expectedChecksum, actualChecksum)
+				} else if (!functions.containsKey(stringType) || !functions[stringType]!!
+						.parse(
+							handler, content
+						)
+				) {
+					handler.onUnrecognized(sentenceWoWs)
+				}
+			} else {
+				handler.onUnrecognized(sentenceWoWs)
+			}
+		} catch (e: Exception) {
+			handler.onException(e)
+		} finally {
+			handler.onFinished()
+		}
+	}
 
     private enum class Status {
         A, V
