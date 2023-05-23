@@ -5,7 +5,7 @@ import com.github.petr_s.nmea.basic.BasicNMEAHandler
 import com.github.petr_s.nmea.basic.BasicNMEAHandler.FixQuality
 import com.github.petr_s.nmea.basic.BasicNMEAHandler.FixType
 import com.github.petr_s.nmea.basic.BasicNMEAParser
-import java.util.*
+import java.util.Arrays
 
 class NMEAParser @JvmOverloads constructor(
     private val handler: NMEAHandler?,
@@ -82,7 +82,7 @@ class NMEAParser @JvmOverloads constructor(
         prn: Int,
         elevation: Float,
         azimuth: Float,
-        snr: Int
+        snr: Float
     ) {
         if (count != satellitesCount) {
             satellitesCount = count
@@ -152,11 +152,11 @@ class NMEAParser @JvmOverloads constructor(
         prn: Int?,
         elevation: Float?,
         azimuth: Float?,
-        snr: Int?,
+        snr: Float?,
         isGN: Boolean
     ) {
-        if(index!= null && satellites != null && prn != null && elevation != null && azimuth != null && snr != null)
-            newSatellite(index, satellites, prn, elevation, azimuth, snr)
+        if(index!= null && satellites != null && prn != null && elevation != null && azimuth != null)
+            newSatellite(index, satellites, prn, elevation, azimuth, snr ?: 0F)
         yieldSatellites()
     }
 
