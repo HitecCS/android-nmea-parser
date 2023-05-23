@@ -23,7 +23,7 @@ class BasicNMEAParser(private val handler: BasicNMEAHandler?) {
         private const val CAP_FLOAT = "(\\d*[.]?\\d+)"
         private const val CAP_NEGATIVE_FLOAT = "([-]?\\d*[.]?\\d+)"
         private const val HEX_INT = "[0-9a-fA-F]"
-        private val GENERAL_SENTENCE = Pattern.compile("^\\$(\\w{5}),(.*)[*](" + HEX_INT + "{2})$")
+        private val GENERAL_SENTENCE = Pattern.compile("^$([A-Z]{5}),(.*)[*](${HEX_INT}{2})$")
         private val GPRMC = Pattern.compile(
             "(\\d{5})?" +
                     "(\\d[.]?\\d*)?" + COMMA +
