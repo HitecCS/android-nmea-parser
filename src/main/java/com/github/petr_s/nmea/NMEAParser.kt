@@ -5,17 +5,17 @@ import com.github.petr_s.nmea.basic.BasicNMEAHandler
 import com.github.petr_s.nmea.basic.BasicNMEAHandler.FixQuality
 import com.github.petr_s.nmea.basic.BasicNMEAHandler.FixType
 import com.github.petr_s.nmea.basic.BasicNMEAParser
-import java.util.*
+import java.util.Arrays
 
 class NMEAParser @JvmOverloads constructor(
     private val handler: NMEAHandler?,
     private val locationFactory: LocationFactory = object : LocationFactory() {
-        override fun newLocation(): Location? {
+        override fun newLocation(): Location {
             return Location(LOCATION_PROVIDER_NAME)
         }
     }
 ) : BasicNMEAHandler {
-    private val basicParser: BasicNMEAParser
+    private val basicParser: BasicNMEAParser = BasicNMEAParser(this)
     private var location: Location? = null
     private var lastTime: Long = 0
     private var flags = 0
@@ -69,7 +69,7 @@ class NMEAParser @JvmOverloads constructor(
                     satellite.setHasEphemeris(true) // TODO: ...
                 }
             }
-            handler!!.onSatellites(Arrays.asList(*Arrays.copyOf(tempSatellites, satellitesCount)))
+            handler!!.onSatellites(listOf(*tempSatellites.copyOf(satellitesCount)))
             Arrays.fill(tempSatellites, null)
             activeSatellites = null
             satellitesCount = 0
@@ -82,7 +82,7 @@ class NMEAParser @JvmOverloads constructor(
         prn: Int,
         elevation: Float,
         azimuth: Float,
-        snr: Int
+        snr: Float
     ) {
         if (count != satellitesCount) {
             satellitesCount = count
@@ -152,11 +152,11 @@ class NMEAParser @JvmOverloads constructor(
         prn: Int?,
         elevation: Float?,
         azimuth: Float?,
-        snr: Int?,
+        snr: Float?,
         isGN: Boolean
     ) {
-        if(index!= null && satellites != null && prn != null && elevation != null && azimuth != null && snr != null)
-            newSatellite(index, satellites, prn, elevation, azimuth, snr)
+        if(index!= null && satellites != null && prn != null && elevation != null && azimuth != null)
+            newSatellite(index, satellites, prn, elevation, azimuth, snr ?: 0F)
         yieldSatellites()
     }
 
@@ -202,7 +202,6 @@ class NMEAParser @JvmOverloads constructor(
     }
 
     init {
-        basicParser = BasicNMEAParser(this)
         if (handler == null) {
             throw NullPointerException()
         }

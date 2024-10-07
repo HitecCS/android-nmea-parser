@@ -74,7 +74,7 @@ interface BasicNMEAHandler {
               prn: Int?,
               elevation: Float?,
               azimuth: Float?,
-              snr: Int?,
+              snr: Float?,
               isGN: Boolean)
 
     /***

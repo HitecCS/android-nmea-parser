@@ -1,14 +1,8 @@
 package com.github.petr_s.nmea.basic
 
-import kotlin.Throws
-import java.lang.Exception
 import com.github.petr_s.nmea.basic.BasicNMEAHandler.FixQuality
 import com.github.petr_s.nmea.basic.BasicNMEAHandler.FixType
 import java.io.UnsupportedEncodingException
-import java.lang.Class
-import java.lang.StringBuilder
-import kotlin.jvm.Synchronized
-import java.lang.NullPointerException
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.regex.Matcher
@@ -21,9 +15,10 @@ class BasicNMEAParser(private val handler: BasicNMEAHandler?) {
         private val DATE_FORMAT = SimpleDateFormat("ddMMyy", Locale.US)
         private const val COMMA = ","
         private const val CAP_FLOAT = "(\\d*[.]?\\d+)"
+        private const val CAP_FLOAT_OPT = "(\\d*[.]?\\d+)?"
         private const val CAP_NEGATIVE_FLOAT = "([-]?\\d*[.]?\\d+)"
         private const val HEX_INT = "[0-9a-fA-F]"
-        private val GENERAL_SENTENCE = Pattern.compile("^\\$(\\w{5}),(.*)[*](" + HEX_INT + "{2})$")
+        private val GENERAL_SENTENCE = Pattern.compile("^\\$([A-Z]{5}),(.*)[*](${HEX_INT}{2})$")
         private val GPRMC = Pattern.compile(
             "(\\d{5})?" +
                     "(\\d[.]?\\d*)?" + COMMA +
@@ -55,6 +50,32 @@ class BasicNMEAParser(private val handler: BasicNMEAHandler?) {
                     CAP_FLOAT + "?" + COMMA +
                     "(\\d{4})?"
         )
+
+        /**
+         * @see <a href="https://receiverhelp.trimble.com/alloy-gnss/en-us/NMEA-0183messages_GSV.html">NMEA docs</a>
+         * |  Field  |	Meaning
+         * |---------|------------------------------------------------------------------------------
+         * |       0 |	Message ID
+         * |       1 |	Total number of messages of this type in this cycle
+         * |       2 |	Message number
+         * |       3 |	Total number of SVs visible
+         * |       4 |	SV PRN number                                                            (*)
+         * |       5 |	Elevation, in degrees, 90° maximum                                       (*)
+         * |       6 |	Azimuth, degrees from True North, 000° through 359°                      (*)
+         * |       7 |	SNR, 00 through 99 dB (null when not tracking)                           (*)
+         * |    8–11 | 	Information about second SV, same format as fields 4 through 7
+         * |   12–15 |	Information about third SV, same format as fields 4 through 7
+         * |   16–19 |	Information about fourth SV, same format as fields 4 through 7
+         * |      20 |	The checksum data, always begins with *
+         * |---------|------------------------------------------------------------------------------
+         * (*) = this is the data of one SV
+         *
+         * Example interpretation of parts:
+         *       main     |     sv #1   |       sv #2     |      sv #3      |    sv #4    | checksum
+         * $GPGSV,3,1,11, | 29,83,295,, | 25,66,112,15.9, | 28,52,266,14.1, | 31,35,305,, | 1*69
+         * $GPGSV,3,2,11, | 36,34,163,, | 12,29,111,,     | 11,28,048,,     | 20,21,080,, | 1*65
+         * $GPGSV,3,3,11, | 18,18,191,, | 26,18,299,,     | 05,13,105,,     | 1*51
+         */
         private val GPGSV = Pattern.compile(
             "(\\d+)" + COMMA +
                     "(\\d+)" + COMMA +
@@ -62,19 +83,19 @@ class BasicNMEAParser(private val handler: BasicNMEAHandler?) {
                     "(\\d{2})" + COMMA +
                     "(\\d{2})" + COMMA +
                     "(\\d{3})" + COMMA +
-                    "(\\d{2})" + COMMA +
+                    CAP_FLOAT_OPT + COMMA +
                     "(\\d{2})?" + COMMA + "?" +
                     "(\\d{2})?" + COMMA + "?" +
                     "(\\d{3})?" + COMMA + "?" +
-                    "(\\d{2})?" + COMMA + "?" +
-                    "(\\d{2})?" + COMMA + "?" +
-                    "(\\d{2})?" + COMMA + "?" +
-                    "(\\d{3})?" + COMMA + "?" +
-                    "(\\d{2})?" + COMMA + "?" +
+                    CAP_FLOAT_OPT + COMMA + "?" +
                     "(\\d{2})?" + COMMA + "?" +
                     "(\\d{2})?" + COMMA + "?" +
                     "(\\d{3})?" + COMMA + "?" +
-                    "(\\d{2})?"
+                    CAP_FLOAT_OPT + COMMA + "?" +
+                    "(\\d{2})?" + COMMA + "?" +
+                    "(\\d{2})?" + COMMA + "?" +
+                    "(\\d{3})?" + COMMA + "?" +
+                    CAP_FLOAT_OPT
         )
         private val GPGSA = Pattern.compile(
             regexify(
@@ -251,7 +272,7 @@ class BasicNMEAParser(private val handler: BasicNMEAHandler?) {
             type: StringType
         ): Boolean {
             val matcher = ExMatcher(GPGSV.matcher(sentence))
-            if (matcher.matches()) {
+            if (matcher.find()) {
                 val isGN = type == StringType.GNGSV
                 val sentences = matcher.nextInt("n-sentences")
                 val index = matcher.nextInt("sentence-index")?.minus(1)
@@ -260,7 +281,7 @@ class BasicNMEAParser(private val handler: BasicNMEAHandler?) {
                     val prn = matcher.nextInt("prn")
                     val elevation = matcher.nextInt("elevation")
                     val azimuth = matcher.nextInt("azimuth")
-                    val snr = matcher.nextInt("snr")
+                    val snr = matcher.nextFloat("snr",0F)
                     if (prn != null) {
                         handler!!.onGSV(
                             satellites,
@@ -418,38 +439,43 @@ class BasicNMEAParser(private val handler: BasicNMEAHandler?) {
         }
     }
 
-    @Synchronized
-    fun parse(sentence: String?) {
-        if (sentence == null) {
-            throw NullPointerException()
-        }
-        handler!!.onStart()
-        try {
-            val matcher = ExMatcher(GENERAL_SENTENCE.matcher(sentence))
-            if (matcher.matches()) {
-                val type = matcher.nextString("type")!!
-                val stringType = StringType.valueOf(type)
-                val content = matcher.nextString("content")!!
-                val expected_checksum = matcher.nextHexInt("checksum")!!
-                val actual_checksum = calculateChecksum(sentence)
-                if (actual_checksum != expected_checksum) {
-                    handler.onBadChecksum(expected_checksum, actual_checksum)
-                } else if (!functions.containsKey(stringType) || !functions[stringType]!!
-                        .parse(
-                            handler, content
-                        )
-                ) {
-                    handler.onUnrecognized(sentence)
-                }
-            } else {
-                handler.onUnrecognized(sentence)
-            }
-        } catch (e: Exception) {
-            handler.onException(e)
-        } finally {
-            handler.onFinished()
-        }
-    }
+	@Synchronized
+	fun parse(sentence: String?) {
+		if (sentence == null) {
+			throw NullPointerException()
+		}
+
+		// Remove whitespaces
+		val whitespace = listOf(' ', '\n', '\r', '\t')
+		val sentenceWoWs = sentence.filterNot { whitespace.contains(it) }
+
+		handler!!.onStart()
+		try {
+			val matcher = ExMatcher(GENERAL_SENTENCE.matcher(sentenceWoWs))
+			if (matcher.matches()) {
+				val type = matcher.nextString("type")!!
+				val stringType = StringType.valueOf(type)
+				val content = matcher.nextString("content")!!
+				val expectedChecksum = matcher.nextHexInt("checksum")!!
+				val actualChecksum = calculateChecksum(sentenceWoWs)
+				if (actualChecksum != expectedChecksum) {
+					handler.onBadChecksum(expectedChecksum, actualChecksum)
+				} else if (!functions.containsKey(stringType) || !functions[stringType]!!
+						.parse(
+							handler, content
+						)
+				) {
+					handler.onUnrecognized(sentenceWoWs)
+				}
+			} else {
+				handler.onUnrecognized(sentenceWoWs)
+			}
+		} catch (e: Exception) {
+			handler.onException(e)
+		} finally {
+			handler.onFinished()
+		}
+	}
 
     private enum class Status {
         A, V
@@ -493,6 +519,10 @@ class BasicNMEAParser(private val handler: BasicNMEAHandler?) {
 
         fun matches(): Boolean {
             return original.matches()
+        }
+
+        fun find(): Boolean {
+            return original.find()
         }
 
         fun nextString(name: String?): String? {
